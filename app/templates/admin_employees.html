@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Admin - Employees - Faceoffice{% endblock %}
+
+{% block content %}
+<div class="page-container admin-page">
+    <div class="admin-header">
+        <h2>Registered Employees</h2>
+        <a href="/admin/register" class="btn btn-primary">Register New Employee</a>
+    </div>
+
+    <div class="employees-container">
+        <table id="employeesTable" class="employees-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Registered</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="5">Loading employees...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+async function loadEmployees() {
+    try {
+        const response = await fetch('/admin/employees/list');
+        const data = await response.json();
+
+        if (data.employees.length === 0) {
+            document.querySelector('#employeesTable tbody').innerHTML = '<tr><td colspan="5">No employees registered yet.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        data.employees.forEach(emp => {
+            html += `
+                <tr>
+                    <td>${emp.name}</td>
+                    <td>${emp.email}</td>
+                    <td>${emp.phone}</td>
+                    <td>${new Date(emp.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <button class="btn btn-danger btn-small" onclick="deleteEmployee(${emp.id}, '${emp.name}')">Delete</button>
+                    </td>
+                </tr>
+            `;
+        });
+
+        document.querySelector('#employeesTable tbody').innerHTML = html;
+    } catch (e) {
+        document.querySelector('#employeesTable tbody').innerHTML = `<tr><td colspan="5">Error loading employees: ${e.message}</td></tr>`;
+    }
+}
+
+async function deleteEmployee(employeeId, employeeName) {
+    if (!confirm(`Delete employee "${employeeName}"?`)) return;
+
+    try {
+        const response = await fetch(`/admin/employees/${employeeId}`, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (response.ok) {
+            alert('Employee deleted successfully.');
+            loadEmployees();
+        } else {
+            alert(data.error || 'Error deleting employee');
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+loadEmployees();
+</script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Employee Dashboard - Faceoffice{% endblock %}
+
+{% block content %}
+<div class="page-container dashboard-page">
+    <div class="dashboard-header">
+        <h2>Employee Dashboard</h2>
+        <form method="POST" action="/employee/logout" style="display:inline;">
+            <button type="submit" class="btn btn-secondary">Logout</button>
+        </form>
+    </div>
+
+    <div class="requests-container">
+        <h3>Pending Visitor Requests</h3>
+
+        <div id="requestsList" class="requests-list">
+            <p>Loading requests...</p>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+<script>
+async function loadRequests() {
+    try {
+        const response = await fetch('/employee/dashboard/requests');
+        const data = await response.json();
+
+        if (data.requests.length === 0) {
+            document.getElementById('requestsList').innerHTML = '<p>No pending requests at this time.</p>';
+            return;
+        }
+
+        let html = '';
+        data.requests.forEach(request => {
+            html += `
+                <div class="request-card">
+                    <img src="${request.photo_url}" alt="Visitor" class="request-photo">
+                    <div class="request-info">
+                        <h4>${request.visitor_name}</h4>
+                        <p><strong>Phone:</strong> ${request.visitor_phone}</p>
+                        <p><strong>Requested:</strong> ${new Date(request.created_at).toLocaleString()}</p>
+                    </div>
+                    <div class="request-actions">
+                        <button class="btn btn-success" onclick="acceptRequest(${request.id})">Accept</button>
+                        <button class="btn btn-danger" onclick="rejectRequest(${request.id})">Reject</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        document.getElementById('requestsList').innerHTML = html;
+    } catch (e) {
+        document.getElementById('requestsList').innerHTML = `<p class="error">Error loading requests: ${e.message}</p>`;
+    }
+}
+
+async function acceptRequest(requestId) {
+    if (!confirm('Accept this visitor request?')) return;
+
+    try {
+        const response = await fetch(`/employee/accept/${requestId}`, { method: 'POST' });
+        const data = await response.json();
+
+        if (response.ok) {
+            alert('Request accepted. Visitor has been notified via SMS.');
+            loadRequests();
+        } else {
+            alert(data.error || 'Error accepting request');
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function rejectRequest(requestId) {
+    if (!confirm('Reject this visitor request?')) return;
+
+    try {
+        const response = await fetch(`/employee/reject/${requestId}`, { method: 'POST' });
+        const data = await response.json();
+
+        if (response.ok) {
+            alert('Request rejected. Visitor has been notified via SMS.');
+            loadRequests();
+        } else {
+            alert(data.error || 'Error rejecting request');
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+// Load requests on page load and refresh every 10 seconds
+loadRequests();
+setInterval(loadRequests, 10000);
+</script>
+{% endblock %}

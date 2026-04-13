@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Visitor Kiosk - Faceoffice{% endblock %}
+
+{% block content %}
+<div class="page-container visitor-page">
+    <h2>Welcome to Faceoffice</h2>
+    <p>Please provide your information and take a photo for the visitor request.</p>
+
+    <form id="visitorForm" class="form-container">
+        <div class="form-group">
+            <label for="visitorName">Your Full Name *</label>
+            <input type="text" id="visitorName" name="visitorName" required placeholder="John Doe">
+        </div>
+
+        <div class="form-group">
+            <label for="employeeContact">Person of Contact (Employee Name) *</label>
+            <input type="text" id="employeeContact" name="employeeContact" required placeholder="Jane Smith">
+        </div>
+
+        <div class="form-group">
+            <label for="visitorEmail">Your Email *</label>
+            <input type="email" id="visitorEmail" name="visitorEmail" required placeholder="john.doe@example.com">
+        </div>
+
+        <div class="form-group">
+            <label for="phoneNumber">Your Phone Number *</label>
+            <input type="tel" id="phoneNumber" name="phoneNumber" required placeholder="+1 (555) 123-4567">
+        </div>
+
+        <div class="camera-section">
+            <h3>Capture Your Photo</h3>
+            <video id="cameraFeed" class="camera-video"></video>
+            <div class="camera-controls">
+                <button type="button" id="startCamera" class="btn btn-primary">Start Camera</button>
+                <button type="button" id="capturePhoto" class="btn btn-success" disabled>Capture Photo</button>
+                <button type="button" id="stopCamera" class="btn btn-danger" disabled>Stop Camera</button>
+            </div>
+
+            <canvas id="photoCanvas" style="display:none;"></canvas>
+            <div id="photoPreview" class="photo-preview">
+                <img id="capturedPhoto" src="" alt="Captured photo" style="display:none;">
+            </div>
+        </div>
+
+        <div id="statusMessage" class="status-message"></div>
+
+        <button type="submit" class="btn btn-primary" id="submitBtn" disabled>Submit Request</button>
+    </form>
+</div>
+
+<script src="{{ url_for('static', filename='js/camera.js') }}"></script>
+<script>
+document.getElementById('visitorForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData();
+    formData.append('visitorName', document.getElementById('visitorName').value);
+    formData.append('employeeContact', document.getElementById('employeeContact').value);
+    formData.append('visitorEmail', document.getElementById('visitorEmail').value);
+    formData.append('phoneNumber', document.getElementById('phoneNumber').value);
+
+    // Get captured photo from canvas
+    const canvas = document.getElementById('photoCanvas');
+    const photoData = canvas.toDataURL('image/jpeg');
+    formData.append('faceImage', photoData);
+
+    try {
+        const response = await fetch('/visitor/submit-request', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            document.getElementById('statusMessage').textContent = 'Request submitted successfully! You will receive an email confirmation from the employee.';
+            document.getElementById('statusMessage').className = 'status-message success';
+            // Reset form
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            document.getElementById('statusMessage').textContent = data.error || 'Error submitting request';
+            document.getElementById('statusMessage').className = 'status-message error';
+        }
+    } catch (e) {
+        document.getElementById('statusMessage').textContent = 'Error: ' + e.message;
+        document.getElementById('statusMessage').className = 'status-message error';
+    }
+});
+</script>
+{% endblock %}
