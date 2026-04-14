@@ -1,52 +1,340 @@
+# app/services/email_service.py
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 import logging
+from flask import current_app
 
 logger = logging.getLogger(__name__)
 
 class EmailService:
-    """Send emails using Gmail SMTP + Python native SMTP (no Flask-Mail needed)"""
+    """Send emails via Gmail SMTP (no external service needed)"""
     
-    def __init__(self):
-        self.smtp_server = os.environ.get('SMTP_SERVER', 'smtp.gmail.com')
-        self.smtp_port = int(os.environ.get('SMTP_PORT', 587))
-        self.sender_email = os.environ.get('SMTP_EMAIL')
-        self.sender_password = os.environ.get('SMTP_PASSWORD')
-        
-        if not self.sender_email or not self.sender_password:
-            logger.warning("SMTP credentials not configured")
-    
-    def send_email(self, recipient_email, subject, html_body):
-        """Send email via Gmail SMTP"""
+    @staticmethod
+    def send_visitor_notification(employee_email, employee_name, visitor_name, visitor_photo_url):
+        """
+        PHASE 2.1: Send notification to employee when visitor request is created
+        Triggered automatically when visitor submits request
+        """
         try:
-            if not self.sender_email or not self.sender_password:
+            sender_email = os.environ.get('MAIL_USERNAME')
+            sender_password = os.environ.get('MAIL_PASSWORD')
+            smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+            smtp_port = int(os.environ.get('MAIL_PORT', 587))
+            
+            if not sender_email or not sender_password:
                 logger.error("SMTP credentials not configured")
-                return False, "SMTP credentials not configured"
+                return False, "SMTP credentials missing"
+            
+            # HTML email template
+            html_body = f"""
+            <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; color: #333; }}
+                        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                        .header {{ background-color: #007bff; color: white; padding: 20px; border-radius: 5px 5px 0 0; }}
+                        .content {{ background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; }}
+                        .photo-section {{ margin: 20px 0; text-align: center; }}
+                        .photo-section img {{ max-width: 250px; border-radius: 8px; border: 2px solid #ddd; }}
+                        .button {{ background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 15px; }}
+                        .footer {{ background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h2>🚨 New Visitor Request</h2>
+                        </div>
+                        <div class="content">
+                            <p>Hi <strong>{employee_name}</strong>,</p>
+                            <p><strong>{visitor_name}</strong> is requesting to meet you.</p>
+                            
+                            <div class="photo-section">
+                                <p><strong>Visitor Photo:</strong></p>
+                                <img src="{visitor_photo_url}" alt="Visitor photo">
+                            </div>
+                            
+                            <p style="margin-top: 20px;">
+                                <a href="{current_app.config.get('APP_URL', 'http://localhost:5000')}/employee/dashboard" class="button">
+                                    View Full Request in Dashboard
+                                </a>
+                            </p>
+                            
+                            <p style="color: #ff6b6b; font-weight: bold; margin-top: 20px;">
+                                ⏱️ Please respond within 2 minutes. If you don't respond, a reminder will be sent.
+                            </p>
+                        </div>
+                        <div class="footer">
+                            <p>This is an automated notification from Faceoffice Visitor Management System.</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """
             
             # Create message
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = self.sender_email
-            msg['To'] = recipient_email
-            
-            # Attach HTML
+            msg['Subject'] = f"🔔 New Visitor Request: {visitor_name}"
+            msg['From'] = sender_email
+            msg['To'] = employee_email
             msg.attach(MIMEText(html_body, 'html'))
             
-            # Send via SMTP
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+            # Send email via SMTP
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()
-                server.login(self.sender_email, self.sender_password)
-                server.sendmail(self.sender_email, recipient_email, msg.as_string())
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, employee_email, msg.as_string())
             
-            logger.info(f"✓ Email sent to {recipient_email}")
+            logger.info(f"✓ Visitor notification email sent to {employee_email}")
             return True, None
-            
+        
         except Exception as e:
-            logger.error(f"✗ Failed to send email to {recipient_email}: {str(e)}")
+            logger.error(f"✗ Failed to send visitor notification: {str(e)}")
             return False, str(e)
-
-
-# Initialize global email service
-email_service = EmailService()
+    
+    @staticmethod
+    def send_approval_email(visitor_email, visitor_name, employee_name, employee_email):
+        """
+        PHASE 4.1: Send approval email to VISITOR
+        Triggered when employee approves request
+        """
+        try:
+            sender_email = os.environ.get('MAIL_USERNAME')
+            sender_password = os.environ.get('MAIL_PASSWORD')
+            smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+            smtp_port = int(os.environ.get('MAIL_PORT', 587))
+            
+            html_body = f"""
+            <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; color: #333; }}
+                        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                        .header {{ background-color: #28a745; color: white; padding: 20px; border-radius: 5px 5px 0 0; text-align: center; }}
+                        .content {{ background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; }}
+                        .success-box {{ background-color: #d4edda; border: 1px solid #28a745; color: #155724; padding: 15px; border-radius: 5px; margin: 15px 0; }}
+                        .footer {{ background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h2>✅ Your Visit Has Been Approved!</h2>
+                        </div>
+                        <div class="content">
+                            <p>Hi <strong>{visitor_name}</strong>,</p>
+                            
+                            <div class="success-box">
+                                <p><strong>{employee_name}</strong> has approved your visitor request!</p>
+                                <p>You may now proceed to meet them. 🎉</p>
+                            </div>
+                            
+                            <p>Thank you for using Faceoffice Visitor Management System.</p>
+                        </div>
+                        <div class="footer">
+                            <p>This is an automated confirmation from Faceoffice.</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """
+            
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"✅ Visit Approved by {employee_name}"
+            msg['From'] = sender_email
+            msg['To'] = visitor_email
+            msg.attach(MIMEText(html_body, 'html'))
+            
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, visitor_email, msg.as_string())
+            
+            logger.info(f"✓ Approval email sent to visitor {visitor_email}")
+            return True, None
+        
+        except Exception as e:
+            logger.error(f"✗ Failed to send approval email: {str(e)}")
+            return False, str(e)
+    
+    @staticmethod
+    def send_approval_confirmation_to_employee(employee_email, employee_name, visitor_name):
+        """
+        PHASE 4.2: Send confirmation email to EMPLOYEE after approval
+        """
+        try:
+            sender_email = os.environ.get('MAIL_USERNAME')
+            sender_password = os.environ.get('MAIL_PASSWORD')
+            smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+            smtp_port = int(os.environ.get('MAIL_PORT', 587))
+            
+            html_body = f"""
+            <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; color: #333; }}
+                        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                        .header {{ background-color: #28a745; color: white; padding: 20px; border-radius: 5px 5px 0 0; text-align: center; }}
+                        .content {{ background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; }}
+                        .footer {{ background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h2>✅ Confirmation: Request Approved</h2>
+                        </div>
+                        <div class="content">
+                            <p>Hi <strong>{employee_name}</strong>,</p>
+                            <p>You have successfully approved the visitor request from <strong>{visitor_name}</strong>.</p>
+                            <p>A confirmation email has been sent to the visitor.</p>
+                        </div>
+                        <div class="footer">
+                            <p>Faceoffice Visitor Management System</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """
+            
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"Confirmation: Visitor Request Approved - {visitor_name}"
+            msg['From'] = sender_email
+            msg['To'] = employee_email
+            msg.attach(MIMEText(html_body, 'html'))
+            
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, employee_email, msg.as_string())
+            
+            logger.info(f"✓ Employee confirmation email sent to {employee_email}")
+            return True, None
+        
+        except Exception as e:
+            logger.error(f"✗ Failed to send confirmation email: {str(e)}")
+            return False, str(e)
+    
+    @staticmethod
+    def send_rejection_email(visitor_email, visitor_name, employee_name, employee_email):
+        """
+        PHASE 4.3: Send rejection email to VISITOR
+        """
+        try:
+            sender_email = os.environ.get('MAIL_USERNAME')
+            sender_password = os.environ.get('MAIL_PASSWORD')
+            smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+            smtp_port = int(os.environ.get('MAIL_PORT', 587))
+            
+            html_body = f"""
+            <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; color: #333; }}
+                        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                        .header {{ background-color: #dc3545; color: white; padding: 20px; border-radius: 5px 5px 0 0; text-align: center; }}
+                        .content {{ background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; }}
+                        .info-box {{ background-color: #f8d7da; border: 1px solid #dc3545; color: #721c24; padding: 15px; border-radius: 5px; margin: 15px 0; }}
+                        .footer {{ background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h2>❌ Request Declined</h2>
+                        </div>
+                        <div class="content">
+                            <p>Hi <strong>{visitor_name}</strong>,</p>
+                            
+                            <div class="info-box">
+                                <p><strong>{employee_name}</strong> has declined your visitor request.</p>
+                                <p>Unfortunately, you will not be able to meet at this time.</p>
+                            </div>
+                            
+                            <p>If you believe this is an error, please contact building security.</p>
+                        </div>
+                        <div class="footer">
+                            <p>Faceoffice Visitor Management System</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """
+            
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"❌ Visit Request Declined"
+            msg['From'] = sender_email
+            msg['To'] = visitor_email
+            msg.attach(MIMEText(html_body, 'html'))
+            
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, visitor_email, msg.as_string())
+            
+            logger.info(f"✓ Rejection email sent to visitor {visitor_email}")
+            return True, None
+        
+        except Exception as e:
+            logger.error(f"✗ Failed to send rejection email: {str(e)}")
+            return False, str(e)
+    
+    @staticmethod
+    def send_rejection_confirmation_to_employee(employee_email, employee_name, visitor_name):
+        """
+        PHASE 4.4: Send rejection confirmation email to EMPLOYEE
+        """
+        try:
+            sender_email = os.environ.get('MAIL_USERNAME')
+            sender_password = os.environ.get('MAIL_PASSWORD')
+            smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+            smtp_port = int(os.environ.get('MAIL_PORT', 587))
+            
+            html_body = f"""
+            <html>
+                <head>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; color: #333; }}
+                        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                        .header {{ background-color: #dc3545; color: white; padding: 20px; border-radius: 5px 5px 0 0; text-align: center; }}
+                        .content {{ background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; }}
+                        .footer {{ background-color: #f0f0f0; padding: 15px; text-align: center; font-size: 12px; color: #666; }}
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h2>✅ Confirmation: Request Declined</h2>
+                        </div>
+                        <div class="content">
+                            <p>Hi <strong>{employee_name}</strong>,</p>
+                            <p>You have declined the visitor request from <strong>{visitor_name}</strong>.</p>
+                            <p>A notification has been sent to the visitor.</p>
+                        </div>
+                        <div class="footer">
+                            <p>Faceoffice Visitor Management System</p>
+                        </div>
+                    </div>
+                </body>
+            </html>
+            """
+            
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = f"Confirmation: Visitor Request Declined - {visitor_name}"
+            msg['From'] = sender_email
+            msg['To'] = employee_email
+            msg.attach(MIMEText(html_body, 'html'))
+            
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                server.starttls()
+                server.login(sender_email, sender_password)
+                server.sendmail(sender_email, employee_email, msg.as_string())
+            
+            logger.info(f"✓ Employee rejection confirmation sent to {employee_email}")
+            return True, None
+        
+        except Exception as e:
+            logger.error(f"✗ Failed to send rejection confirmation: {str(e)}")
+            return False, str(e)
