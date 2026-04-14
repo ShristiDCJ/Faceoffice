@@ -25,10 +25,10 @@ def create_visitor_request(visitor_name, visitor_email, visitor_phone, employee_
 
         employee = request_obj.employee
 
-        # Schedule 2-minute reminder (sends email to employee)
+        # Schedule 2-minute reminder (but don't crash if it fails)
         schedule_2min_reminder(request_obj.id, employee.email, employee.name, visitor_name)
 
-        # Trigger employee email notification
+        # Trigger employee email notification (but don't crash if it fails)
         notify_employee_visitor_arrived(
             employee_email=employee.email,
             visitor_name=visitor_name,
