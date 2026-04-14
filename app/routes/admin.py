@@ -7,6 +7,19 @@ import os
 # Simple admin authentication using environment variable
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'admin-change-in-production')
 
+# After creating employee in SQLAlchemy, also save to Firebase
+from app.services.firebase_service import FirebaseService
+
+employee_id_firebase, error = FirebaseService.create_employee(
+    name=name,
+    email=email,
+    phone=phone,
+    face_encoding=face_encoding_numpy
+)
+
+if not error:
+    logger.info(f"✓ Employee also saved to Firebase with ID: {employee_id_firebase}")
+
 @admin_bp.route('/register', methods=['GET'])
 def register():
     """Admin employee registration page"""
