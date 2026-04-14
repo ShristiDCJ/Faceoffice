@@ -1,9 +1,12 @@
 from flask import jsonify, render_template, request
 from app.routes import visitor_bp
-from app.models import db, VisitorRequest, Employee
-from app.services import facial_recognition
-from app.services import cloudinary_service
-from app.services import request_handler
+from app.models import db, Employee, VisitorRequest
+from app.services import facial_recognition, cloudinary_service
+from app.services.firebase_service import FirebaseService
+from app.services.firebase_request_handler import FirebaseRequestHandler
+import logging
+
+logger = logging.getLogger(__name__)
 
 @visitor_bp.route('/', methods=['GET'])
 def kiosk():
@@ -12,67 +15,93 @@ def kiosk():
 
 @visitor_bp.route('/submit-request', methods=['POST'])
 def submit_request():
-    """Submit visitor meeting request with facial photo"""
+    """Submit visitor meeting request with facial photo - PHASE 2"""
     try:
         visitor_name = request.form.get('visitorName')
-        employee_contact = request.form.get('employeeContact')
+        employee_name = request.form.get('employeeContact')
         visitor_email = request.form.get('visitorEmail')
         visitor_phone = request.form.get('phoneNumber')
         face_image = request.form.get('faceImage')
 
         # Validate inputs
-        if not all([visitor_name, employee_contact, visitor_email, visitor_phone, face_image]):
+        if not all([visitor_name, employee_name, visitor_email, visitor_phone, face_image]):
             return jsonify({'error': 'Missing required fields'}), 400
 
-        # Find employee by name
-        employee = Employee.query.filter_by(name=employee_contact).first()
-        if not employee:
-            return jsonify({'error': f'Employee "{employee_contact}" not found'}), 404
+        # Find employee in Firebase by name
+        employee_id, employee = FirebaseService.get_employee_by_name(employee_name)
+        if not employee_id:
+            return jsonify({'error': f'Employee "{employee_name}" not found'}), 404
 
-        # Encode and verify visitor face
+        # Encode visitor face
         visitor_encoding, error = facial_recognition.capture_and_encode_face(face_image)
         if error:
             return jsonify({'error': error}), 400
 
-        # Upload photo to Cloudinary (optional - use placeholder if fails)
+        # Upload photo to Cloudinary
         photo_url, error = cloudinary_service.upload_photo(face_image, folder='visitor_requests')
         if error:
-            # Use a placeholder URL if Cloudinary fails
+            # Use placeholder if Cloudinary fails
             photo_url = 'data:image/jpeg;base64,' + face_image.split(',')[-1] if ',' in face_image else 'https://via.placeholder.com/300?text=Visitor+Photo'
-            print(f'Cloudinary upload failed, using placeholder: {error}')
+            logger.warning(f'⚠️ Cloudinary upload failed, using placeholder: {error}')
 
-        # Create visitor request and send notifications
-        request_id, error = request_handler.create_visitor_request(
-            visitor_name, visitor_email, visitor_phone, employee.id, photo_url, visitor_encoding
+        # Create visitor request - AUTO-TRIGGERS EMAIL
+        request_id, error = FirebaseRequestHandler.create_visitor_request(
+            visitor_name=visitor_name,
+            visitor_email=visitor_email,
+            visitor_phone=visitor_phone,
+            employee_id=employee_id,
+            photo_url=photo_url,
+            face_encoding=visitor_encoding
         )
 
         if error:
             return jsonify({'error': error}), 500
 
+        # Also save to SQLite for backup (optional)
+        try:
+            emp_obj = Employee.query.filter_by(name=employee_name).first()
+            if emp_obj:
+                visitor_req = VisitorRequest(
+                    visitor_name=visitor_name,
+                    visitor_email=visitor_email,
+                    visitor_phone=visitor_phone,
+                    employee_id=emp_obj.id,
+                    photo_url=photo_url
+                )
+                visitor_req.set_face_encoding(visitor_encoding)
+                db.session.add(visitor_req)
+                db.session.commit()
+        except Exception as e:
+            logger.warning(f"⚠️ SQLite backup failed: {str(e)}")
+
         return jsonify({
             'success': True,
-            'message': 'Request submitted successfully',
+            'message': 'Request submitted successfully. Employee notification sent!',
             'request_id': request_id
         }), 201
 
     except Exception as e:
+        logger.error(f"✗ Error in submit_request: {str(e)}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
-@visitor_bp.route('/check-status/<int:request_id>', methods=['GET'])
+@visitor_bp.route('/check-status/<request_id>', methods=['GET'])
 def check_status(request_id):
-    """Check request acceptance status"""
+    """Check request status from Firebase"""
     try:
-        visitor_request = VisitorRequest.query.get(request_id)
-
-        if not visitor_request:
+        request_data, error = FirebaseService.get_visitor_request(request_id)
+        
+        if not request_data:
             return jsonify({'error': 'Request not found'}), 404
 
+        employee, _ = FirebaseService.get_employee(request_data.get('employee_id'))
+        
         return jsonify({
-            'status': visitor_request.status,
-            'visitor_name': visitor_request.visitor_name,
-            'employee_name': visitor_request.employee.name,
-            'responded_at': visitor_request.responded_at.isoformat() if visitor_request.responded_at else None
+            'status': request_data.get('status'),
+            'visitor_name': request_data.get('visitor_name'),
+            'employee_name': employee.get('name') if employee else 'Unknown',
+            'responded_at': request_data.get('responded_at')
         }), 200
 
     except Exception as e:
+        logger.error(f"✗ Error in check_status: {str(e)}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
