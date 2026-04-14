@@ -1,5 +1,11 @@
 # Environment variables
 .env
+firebase-key.json
+instance/
+__pycache__/
+*.pyc
+venv/
+.DS_Store
 .env.local
 .env.*.local
 
