@@ -9,7 +9,7 @@ class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///faceoffice.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # Flask-Mail
+    # Flask-Mail (Gmail SMTP)
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
     MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
     MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', True)
@@ -22,14 +22,15 @@ class Config:
     CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY')
     CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET')
 
-    # Firebase Cloud Messaging
+    # Firebase Realtime Database
     FIREBASE_KEY_PATH = os.environ.get('FIREBASE_KEY_PATH', 'firebase-key.json')
+    FIREBASE_DB_URL = os.environ.get('FIREBASE_DB_URL')
 
     # App URL
     APP_URL = os.environ.get('APP_URL', 'http://localhost:5000')
 
     # Facial Recognition
-    FACE_RECOGNITION_THRESHOLD = 0.6  # Cosine distance threshold
+    FACE_RECOGNITION_THRESHOLD = 0.6
 
     # Session
     SESSION_COOKIE_SECURE = True
@@ -51,7 +52,6 @@ class TestingConfig(Config):
     """Testing configuration"""
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
-    MAIL_SUPPRESS_SEND = False  # Allow emails in testing
     SESSION_COOKIE_SECURE = False
     DEBUG = True
 
