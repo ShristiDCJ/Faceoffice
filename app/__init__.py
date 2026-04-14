@@ -3,6 +3,7 @@ from flask_mail import Mail
 from config import config
 from app.models import db
 import os
+import logging
 
 mail = Mail()
 
@@ -21,16 +22,25 @@ def create_app(config_name=None):
     db.init_app(app)
     mail.init_app(app)
 
-    # Register error handlers
-    register_error_handlers(app)
+    # Configure logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
-    # Create app context for DB operations
+    # Initialize Firebase on app startup
     with app.app_context():
+        try:
+            from app.services.firebase_service import FirebaseService
+            FirebaseService.initialize()
+            logger.info("✓ Firebase initialized in app factory")
+        except Exception as e:
+            logger.error(f"⚠️ Firebase initialization failed: {str(e)}")
+            logger.info("App will continue without Firebase, but functionality will be limited")
+        
+        # Create SQLAlchemy tables
         db.create_all()
 
-        # Start APScheduler for reminders
-        from app.services.notification import start_scheduler
-        start_scheduler()
+    # Register error handlers
+    register_error_handlers(app)
 
     # Register blueprints
     from app.routes import visitor_bp, auth_bp, employee_bp, admin_bp
