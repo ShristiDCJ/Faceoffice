@@ -21,7 +21,8 @@ def send_email(recipient_email, subject, html_body):
         logger.info(f"Email sent to {recipient_email}")
         return True, None
     except Exception as e:
-        logger.error(f"Failed to send email: {str(e)}")
+        logger.error(f"Failed to send email to {recipient_email}: {str(e)}")
+        # Don't crash - just log and continue
         return False, str(e)
 
 def send_visitor_acceptance_email(visitor_email, visitor_name, employee_name, employee_email):
@@ -120,10 +121,7 @@ def send_employee_pending_reminder_email(employee_email, employee_name, visitor_
     send_email(employee_email, f"Reminder: Pending Visitor Request - {visitor_name}", html_body)
 
 def notify_employee_visitor_arrived(employee_email, visitor_name, visitor_photo_url):
-    """
-    Notify employee that a visitor has arrived via email
-    """
-    # Send email with photo
+    """Notify employee that a visitor has arrived via email"""
     html_body = f"""
     <html>
         <body style="font-family: Arial, sans-serif; color: #333;">
@@ -142,12 +140,15 @@ def notify_employee_visitor_arrived(employee_email, visitor_name, visitor_photo_
         </body>
     </html>
     """
-
-    send_email(
+    
+    # Send email but don't crash if it fails
+    success, error = send_email(
         recipient_email=employee_email,
         subject=f"New Visitor: {visitor_name}",
         html_body=html_body
     )
+    if not success:
+        logger.warning(f"Email notification failed for {employee_email}: {error}")
 
 def schedule_2min_reminder(request_id, employee_email, employee_name, visitor_name):
     """Schedule email reminder 2 minutes after request creation"""
