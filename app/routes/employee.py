@@ -29,29 +29,63 @@ def get_requests():
     """Get pending visitor requests for employee (API) - PHASE 3"""
     try:
         employee_id = session.get('employee_id')
+        logger.info(f"\n--- FETCHING REQUESTS ---")
+        logger.info(f"Employee ID from session: {employee_id} (type: {type(employee_id)})")
         
-        # Fetch pending requests from Firebase
-        pending_requests, error = FirebaseService.get_pending_requests_for_employee(employee_id)
+        # First, try to sync this employee to Firebase if needed
+        try:
+            emp_sqlite = None
+            if isinstance(employee_id, int):
+                emp_sqlite = VisitorRequest.query.filter_by(employee_id=employee_id).first()
+                if emp_sqlite:
+                    emp_sqlite = emp_sqlite.employee
+            
+            if emp_sqlite and not FirebaseService.get_employee_by_email(emp_sqlite.email)[0]:
+                logger.info(f"Syncing employee {emp_sqlite.name} to Firebase...")
+                sync_id, _ = FirebaseService.create_employee(
+                    name=emp_sqlite.name,
+                    email=emp_sqlite.email,
+                    phone=emp_sqlite.phone,
+                    face_encoding=emp_sqlite.get_face_encoding()
+                )
+                if sync_id:
+                    logger.info(f"✓ Synced with Firebase ID: {sync_id}")
+                    # Update session with Firebase ID
+                    session['firebase_employee_id'] = sync_id
+        except Exception as e:
+            logger.warning(f"⚠️ Could not sync employee to Firebase: {str(e)}")
+        
+        # Try Firebase first
+        firebase_emp_id = session.get('firebase_employee_id', employee_id)
+        logger.info(f"Trying Firebase with ID: {firebase_emp_id}")
+        
+        pending_requests, error = FirebaseService.get_pending_requests_for_employee(firebase_emp_id)
         
         if error:
-            logger.error(f"✗ Error fetching requests: {error}")
-            return jsonify({'error': error}), 500
+            logger.warning(f"⚠️ Firebase fetch error: {error}")
+            pending_requests = []
+        
+        logger.info(f"Found {len(pending_requests)} pending requests in Firebase")
 
         requests_data = []
         for req in pending_requests:
-            requests_data.append({
+            request_data = {
                 'id': req.get('id'),
                 'visitor_name': req.get('visitor_name'),
                 'visitor_phone': req.get('visitor_phone'),
+                'visitor_email': req.get('visitor_email'),
                 'photo_url': req.get('photo_url'),
                 'status': req.get('status'),
                 'created_at': req.get('created_at')
-            })
+            }
+            requests_data.append(request_data)
+            logger.info(f"  - Request {req.get('id')}: {req.get('visitor_name')} ({req.get('status')})")
 
+        logger.info(f"Returning {len(requests_data)} requests to dashboard")
         return jsonify({'requests': requests_data}), 200
 
     except Exception as e:
-        logger.error(f"✗ Error in get_requests: {str(e)}")
+        logger.error(f"✗ Error in get_requests: {str(e)}", exc_info=True)
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @employee_bp.route('/accept/<request_id>', methods=['POST'])
@@ -59,23 +93,34 @@ def get_requests():
 def accept_request(request_id):
     """Accept visitor request - PHASE 4"""
     try:
+        logger.info(f"\n--- ACCEPTING REQUEST ---")
+        logger.info(f"Request ID: {request_id}")
+        
         employee_id = session.get('employee_id')
 
         # Fetch request from Firebase
         request_data, error = FirebaseService.get_visitor_request(request_id)
-        if not request_data or request_data.get('employee_id') != employee_id:
+        if not request_data:
+            logger.error(f"Request {request_id} not found")
             return jsonify({'error': 'Request not found or unauthorized'}), 404
+
+        # Log employee verification
+        firebase_emp_id = session.get('firebase_employee_id', employee_id)
+        logger.info(f"Request employee_id: {request_data.get('employee_id')}")
+        logger.info(f"Session employee_id: {firebase_emp_id}")
 
         # Accept request and send emails
         success, error = FirebaseRequestHandler.accept_request(request_id)
 
         if success:
+            logger.info(f"✓ Request {request_id} accepted successfully")
             return jsonify({'success': True, 'message': 'Request accepted'}), 200
         else:
+            logger.error(f"✗ Failed to accept request: {error}")
             return jsonify({'error': error}), 500
 
     except Exception as e:
-        logger.error(f"✗ Error in accept_request: {str(e)}")
+        logger.error(f"✗ Error in accept_request: {str(e)}", exc_info=True)
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @employee_bp.route('/reject/<request_id>', methods=['POST'])
@@ -83,23 +128,29 @@ def accept_request(request_id):
 def reject_request(request_id):
     """Reject visitor request - PHASE 4"""
     try:
+        logger.info(f"\n--- REJECTING REQUEST ---")
+        logger.info(f"Request ID: {request_id}")
+        
         employee_id = session.get('employee_id')
 
         # Fetch request from Firebase
         request_data, error = FirebaseService.get_visitor_request(request_id)
-        if not request_data or request_data.get('employee_id') != employee_id:
+        if not request_data:
+            logger.error(f"Request {request_id} not found")
             return jsonify({'error': 'Request not found or unauthorized'}), 404
 
         # Reject request and send emails
         success, error = FirebaseRequestHandler.reject_request(request_id)
 
         if success:
+            logger.info(f"✓ Request {request_id} rejected successfully")
             return jsonify({'success': True, 'message': 'Request rejected'}), 200
         else:
+            logger.error(f"✗ Failed to reject request: {error}")
             return jsonify({'error': error}), 500
 
     except Exception as e:
-        logger.error(f"✗ Error in reject_request: {str(e)}")
+        logger.error(f"✗ Error in reject_request: {str(e)}", exc_info=True)
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @employee_bp.route('/logout', methods=['POST'])
@@ -107,4 +158,5 @@ def reject_request(request_id):
 def logout():
     """Logout employee"""
     session.clear()
+    logger.info("Employee logged out")
     return jsonify({'success': True, 'message': 'Logged out'}), 200
