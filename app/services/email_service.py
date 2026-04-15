@@ -29,15 +29,28 @@ class EmailService:
         Triggered automatically when visitor submits request
         """
         try:
+            logger.info("=" * 60)
+            logger.info("SENDING VISITOR NOTIFICATION EMAIL")
+            logger.info("=" * 60)
+        
             sender_email = os.environ.get('MAIL_USERNAME')
             sender_password = os.environ.get('MAIL_PASSWORD')
             smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
             smtp_port = int(os.environ.get('MAIL_PORT', 587))
-            
+        
+            logger.info(f"SMTP Configuration:")
+            logger.info(f"  Server: {smtp_server}")
+            logger.info(f"  Port: {smtp_port}")
+            logger.info(f"  Username: {sender_email}")
+            logger.info(f"  Password set: {bool(sender_password)}")
+            logger.info(f"  Recipient: {employee_email}")
+        
             if not sender_email or not sender_password:
-                logger.error("SMTP credentials not configured")
+                logger.error("✗ SMTP credentials not configured")
+                logger.error(f"  MAIL_USERNAME={sender_email}")
+                logger.error(f"  MAIL_PASSWORD={sender_password}")
                 return False, "SMTP credentials missing"
-            
+        
             # HTML email template
             html_body = f"""
             <html>
@@ -61,48 +74,85 @@ class EmailService:
                         <div class="content">
                             <p>Hi <strong>{employee_name}</strong>,</p>
                             <p><strong>{visitor_name}</strong> is requesting to meet you.</p>
-                            
+                        
                             <div class="photo-section">
                                 <p><strong>Visitor Photo:</strong></p>
                                 <img src="{visitor_photo_url}" alt="Visitor photo">
                             </div>
-                            
+                        
                             <p style="margin-top: 20px;">
                                 <a href="{current_app.config.get('APP_URL', 'http://localhost:5000')}/employee/dashboard" class="button">
                                     View Full Request in Dashboard
                                 </a>
                             </p>
-                            
+                        
                             <p style="color: #ff6b6b; font-weight: bold; margin-top: 20px;">
-                                ⏱️ Please respond within 2 minutes. If you don't respond, a reminder will be sent.
+                                ⏱️ Please respond within 2 minutes.
                             </p>
                         </div>
                         <div class="footer">
-                            <p>This is an automated notification from Faceoffice Visitor Management System.</p>
+                            <p>Faceoffice Visitor Management System</p>
                         </div>
                     </div>
                 </body>
             </html>
             """
-            
+        
             # Create message
             msg = MIMEMultipart('alternative')
             msg['Subject'] = f"🔔 New Visitor Request: {visitor_name}"
             msg['From'] = sender_email
             msg['To'] = employee_email
             msg.attach(MIMEText(html_body, 'html'))
-            
-            # Send email via SMTP
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(sender_email, sender_password)
-                server.sendmail(sender_email, employee_email, msg.as_string())
-            
-            logger.info(f"✓ Visitor notification email sent to {employee_email}")
-            return True, None
         
+            logger.info(f"Message created:")
+            logger.info(f"  Subject: {msg['Subject']}")
+            logger.info(f"  From: {msg['From']}")
+            logger.info(f"  To: {msg['To']}")
+        
+            # Send email via SMTP
+            logger.info(f"Connecting to {smtp_server}:{smtp_port}...")
+            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                logger.info("✓ Connected to SMTP server")
+            
+                logger.info("Starting TLS...")
+                server.starttls()
+                logger.info("✓ TLS started")
+            
+                logger.info(f"Logging in as {sender_email}...")
+                server.login(sender_email, sender_password)
+                logger.info("✓ Logged in successfully")
+            
+                logger.info("Sending email...")
+                server.sendmail(sender_email, employee_email, msg.as_string())
+                logger.info("✓ Email sent successfully")
+        
+            logger.info("=" * 60)
+            logger.info(f"✓ Visitor notification email sent to {employee_email}")
+            logger.info("=" * 60)
+            return True, None
+    
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error("=" * 60)
+            logger.error(f"✗ SMTP AUTHENTICATION FAILED")
+            logger.error(f"  Error: {str(e)}")
+            logger.error(f"  Check your email/password in environment variables")
+            logger.error("=" * 60)
+            return False, f"Authentication failed: {str(e)}"
+    
+        except smtplib.SMTPException as e:
+            logger.error("=" * 60)
+            logger.error(f"✗ SMTP ERROR")
+            logger.error(f"  Error: {str(e)}")
+            logger.error("=" * 60)
+            return False, f"SMTP error: {str(e)}"
+    
         except Exception as e:
-            logger.error(f"✗ Failed to send visitor notification: {str(e)}")
+            logger.error("=" * 60)
+            logger.error(f"✗ Failed to send visitor notification")
+            logger.error(f"  Error: {str(e)}")
+            logger.error("=" * 60)
+            logger.exception("Full traceback:")
             return False, str(e)
     
     @staticmethod
