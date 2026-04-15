@@ -198,13 +198,15 @@ class FirebaseService:
             
             if all_requests:
                 for req_id, req_data in all_requests.items():
-                    if (req_data.get('employee_id') == employee_id and 
+                    # Get employee data to compare email
+                    emp_data = FirebaseService.get_employee(req_data.get('employee_id'))[0]
+                    if (emp_data and emp_data.get('email') == employee_email and 
                         req_data.get('status') == 'pending'):
-                        pending_requests.append({'id': req_id, **req_data})
+                            pending_requests.append({'id': req_id, **req_data})
             
             return pending_requests, None
         except Exception as e:
-            logger.error(f"Error fetching pending requests: {str(e)}")
+            logger.error(f"✗ Error fetching pending requests: {str(e)}")
             return [], str(e)
     
     @staticmethod
