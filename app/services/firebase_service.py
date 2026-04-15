@@ -189,24 +189,42 @@ class FirebaseService:
             return None, str(e)
     
     @staticmethod
-    def get_pending_requests_for_employee(employee_id):
-        """Get all pending requests for specific employee"""
+    def get_pending_requests_for_employee(employee_email):
+        """Get all pending requests for specific employee by EMAIL"""
         try:
+            logger.info(f"Searching Firebase for requests with employee_email: {employee_email}")
             ref = db.reference('visitor_requests')
             all_requests = ref.get()
             pending_requests = []
         
+            logger.info(f"Total requests in Firebase: {len(all_requests) if all_requests else 0}")
+        
             if all_requests:
                 for req_id, req_data in all_requests.items():
+                    req_employee_id = req_data.get('employee_id')
+                    req_status = req_data.get('status')
+                
+                    logger.info(f"Checking request {req_id}: employee_id={req_employee_id}, status={req_status}")
+                
                     # Get employee data to compare email
-                    emp_data, _ = FirebaseService.get_employee(req_data.get('employee_id'))
-                    if (emp_data and emp_data.get('email') == employee_email and 
-                        req_data.get('status') == 'pending'):
-                        pending_requests.append({'id': req_id, **req_data})
+                    emp_data, _ = FirebaseService.get_employee(req_employee_id)
+                
+                    if emp_data:
+                        emp_email = emp_data.get('email')
+                        logger.info(f"  Employee email in Firebase: {emp_email}")
+                        logger.info(f"  Comparing: {emp_email} == {employee_email}? {emp_email == employee_email}")
+                    
+                        if emp_email == employee_email and req_status == 'pending':
+                            logger.info(f"  ✓ MATCH! Adding to pending requests")
+                            pending_requests.append({'id': req_id, **req_data})
+                    else:
+                        logger.warning(f"  Employee {req_employee_id} not found in Firebase")
             
+            logger.info(f"Total pending requests found: {len(pending_requests)}")
             return pending_requests, None
+        
         except Exception as e:
-            logger.error(f"✗ Error fetching pending requests: {str(e)}")
+            logger.error(f"✗ Error fetching pending requests: {str(e)}", exc_info=True)
             return [], str(e)
     
     @staticmethod
