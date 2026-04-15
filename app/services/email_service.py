@@ -44,7 +44,7 @@ class EmailService:
             logger.info(f"  Recipient: {employee_email}")
         
             if not sender_email or not sender_password:
-                logger.error("✗ SMTP credentials not configured")
+                logger.error("SMTP credentials not configured")
                 return False, "SMTP credentials missing"
         
             # HTML email template
@@ -65,7 +65,7 @@ class EmailService:
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h2>🚨 New Visitor Request</h2>
+                            <h2>New Visitor Request</h2>
                         </div>
                         <div class="content">
                             <p>Hi <strong>{employee_name}</strong>,</p>
@@ -83,7 +83,7 @@ class EmailService:
                             </p>
                         
                             <p style="color: #ff6b6b; font-weight: bold; margin-top: 20px;">
-                                ⏱️ Please respond within 2 minutes.
+                                Please respond within 2 minutes.
                             </p>
                         </div>
                         <div class="footer">
@@ -96,7 +96,7 @@ class EmailService:
         
             # Create message
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"🔔 New Visitor Request: {visitor_name}"
+            msg['Subject'] = f"New Visitor Request: {visitor_name}"
             msg['From'] = sender_email
             msg['To'] = employee_email
             msg.attach(MIMEText(html_body, 'html'))
@@ -104,38 +104,38 @@ class EmailService:
             logger.info(f"Connecting to {smtp_server}:465 with SSL...")
             # Use SMTP_SSL on port 465
             with smtplib.SMTP_SSL(smtp_server, 465, timeout=10) as server:
-                logger.info("✓ Connected to SMTP server with SSL")
+                logger.info("Connected to SMTP server with SSL")
             
                 logger.info(f"Logging in as {sender_email}...")
                 server.login(sender_email, sender_password)
-                logger.info("✓ Logged in successfully")
+                logger.info("Logged in successfully")
             
                 logger.info("Sending email...")
                 server.sendmail(sender_email, employee_email, msg.as_string())
-                logger.info("✓ Email sent successfully")
+                logger.info("Email sent successfully")
         
             logger.info("=" * 60)
-            logger.info(f"✓ Visitor notification email sent to {employee_email}")
+            logger.info(f"SUCCESS: Visitor notification email sent to {employee_email}")
             logger.info("=" * 60)
             return True, None
     
         except smtplib.SMTPAuthenticationError as e:
             logger.error("=" * 60)
-            logger.error(f"✗ SMTP AUTHENTICATION FAILED")
+            logger.error(f"SMTP AUTHENTICATION FAILED")
             logger.error(f"  Error: {str(e)}")
             logger.error("=" * 60)
             return False, f"Authentication failed: {str(e)}"
     
         except TimeoutError as e:
             logger.error("=" * 60)
-            logger.error(f"✗ SMTP CONNECTION TIMEOUT")
+            logger.error(f"SMTP CONNECTION TIMEOUT")
             logger.error(f"  Error: {str(e)}")
             logger.error("=" * 60)
             return False, f"Timeout: {str(e)}"
     
         except Exception as e:
             logger.error("=" * 60)
-            logger.error(f"✗ Failed to send visitor notification")
+            logger.error(f"Failed to send visitor notification")
             logger.error(f"  Error: {str(e)}")
             logger.error("=" * 60)
             logger.exception("Full traceback:")
@@ -156,7 +156,7 @@ class EmailService:
             smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
             
             if not sender_email or not sender_password:
-                logger.error("✗ SMTP credentials not configured")
+                logger.error("SMTP credentials not configured")
                 return False, "SMTP credentials missing"
             
             html_body = f"""
@@ -174,14 +174,14 @@ class EmailService:
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h2>✅ Your Visit Has Been Approved!</h2>
+                            <h2>Your Visit Has Been Approved</h2>
                         </div>
                         <div class="content">
                             <p>Hi <strong>{visitor_name}</strong>,</p>
                             
                             <div class="success-box">
-                                <p><strong>{employee_name}</strong> has approved your visitor request!</p>
-                                <p>You may now proceed to meet them. 🎉</p>
+                                <p><strong>{employee_name}</strong> has approved your visitor request.</p>
+                                <p>You may now proceed to meet them.</p>
                             </div>
                             
                             <p>Thank you for using Faceoffice Visitor Management System.</p>
@@ -195,28 +195,28 @@ class EmailService:
             """
             
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"✅ Visit Approved by {employee_name}"
+            msg['Subject'] = f"Visit Approved by {employee_name}"
             msg['From'] = sender_email
             msg['To'] = visitor_email
             msg.attach(MIMEText(html_body, 'html'))
             
             logger.info(f"Connecting to {smtp_server}:465 with SSL...")
             with smtplib.SMTP_SSL(smtp_server, 465, timeout=10) as server:
-                logger.info("✓ Connected to SMTP server with SSL")
+                logger.info("Connected to SMTP server with SSL")
                 logger.info(f"Logging in as {sender_email}...")
                 server.login(sender_email, sender_password)
-                logger.info("✓ Logged in successfully")
+                logger.info("Logged in successfully")
                 logger.info("Sending email...")
                 server.sendmail(sender_email, visitor_email, msg.as_string())
-                logger.info("✓ Email sent successfully")
+                logger.info("Email sent successfully")
             
             logger.info("=" * 60)
-            logger.info(f"✓ Approval email sent to visitor {visitor_email}")
+            logger.info(f"SUCCESS: Approval email sent to visitor {visitor_email}")
             logger.info("=" * 60)
             return True, None
         
         except Exception as e:
-            logger.error(f"✗ Failed to send approval email: {str(e)}")
+            logger.error(f"Failed to send approval email: {str(e)}")
             logger.exception("Full traceback:")
             return False, str(e)
     
@@ -235,7 +235,7 @@ class EmailService:
             smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
             
             if not sender_email or not sender_password:
-                logger.error("✗ SMTP credentials not configured")
+                logger.error("SMTP credentials not configured")
                 return False, "SMTP credentials missing"
             
             html_body = f"""
@@ -252,7 +252,7 @@ class EmailService:
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h2>✅ Confirmation: Request Approved</h2>
+                            <h2>Confirmation: Request Approved</h2>
                         </div>
                         <div class="content">
                             <p>Hi <strong>{employee_name}</strong>,</p>
@@ -275,21 +275,21 @@ class EmailService:
             
             logger.info(f"Connecting to {smtp_server}:465 with SSL...")
             with smtplib.SMTP_SSL(smtp_server, 465, timeout=10) as server:
-                logger.info("✓ Connected to SMTP server with SSL")
+                logger.info("Connected to SMTP server with SSL")
                 logger.info(f"Logging in as {sender_email}...")
                 server.login(sender_email, sender_password)
-                logger.info("✓ Logged in successfully")
+                logger.info("Logged in successfully")
                 logger.info("Sending email...")
                 server.sendmail(sender_email, employee_email, msg.as_string())
-                logger.info("✓ Email sent successfully")
+                logger.info("Email sent successfully")
             
             logger.info("=" * 60)
-            logger.info(f"✓ Employee confirmation email sent to {employee_email}")
+            logger.info(f"SUCCESS: Employee confirmation email sent to {employee_email}")
             logger.info("=" * 60)
             return True, None
         
         except Exception as e:
-            logger.error(f"✗ Failed to send confirmation email: {str(e)}")
+            logger.error(f"Failed to send confirmation email: {str(e)}")
             logger.exception("Full traceback:")
             return False, str(e)
     
@@ -308,7 +308,7 @@ class EmailService:
             smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
             
             if not sender_email or not sender_password:
-                logger.error("✗ SMTP credentials not configured")
+                logger.error("SMTP credentials not configured")
                 return False, "SMTP credentials missing"
             
             html_body = f"""
@@ -326,7 +326,7 @@ class EmailService:
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h2>❌ Request Declined</h2>
+                            <h2>Request Declined</h2>
                         </div>
                         <div class="content">
                             <p>Hi <strong>{visitor_name}</strong>,</p>
@@ -347,28 +347,28 @@ class EmailService:
             """
             
             msg = MIMEMultipart('alternative')
-            msg['Subject'] = f"❌ Visit Request Declined"
+            msg['Subject'] = f"Visit Request Declined"
             msg['From'] = sender_email
             msg['To'] = visitor_email
             msg.attach(MIMEText(html_body, 'html'))
             
             logger.info(f"Connecting to {smtp_server}:465 with SSL...")
             with smtplib.SMTP_SSL(smtp_server, 465, timeout=10) as server:
-                logger.info("✓ Connected to SMTP server with SSL")
+                logger.info("Connected to SMTP server with SSL")
                 logger.info(f"Logging in as {sender_email}...")
                 server.login(sender_email, sender_password)
-                logger.info("✓ Logged in successfully")
+                logger.info("Logged in successfully")
                 logger.info("Sending email...")
                 server.sendmail(sender_email, visitor_email, msg.as_string())
-                logger.info("✓ Email sent successfully")
+                logger.info("Email sent successfully")
             
             logger.info("=" * 60)
-            logger.info(f"✓ Rejection email sent to visitor {visitor_email}")
+            logger.info(f"SUCCESS: Rejection email sent to visitor {visitor_email}")
             logger.info("=" * 60)
             return True, None
         
         except Exception as e:
-            logger.error(f"✗ Failed to send rejection email: {str(e)}")
+            logger.error(f"Failed to send rejection email: {str(e)}")
             logger.exception("Full traceback:")
             return False, str(e)
     
@@ -387,7 +387,7 @@ class EmailService:
             smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
             
             if not sender_email or not sender_password:
-                logger.error("✗ SMTP credentials not configured")
+                logger.error("SMTP credentials not configured")
                 return False, "SMTP credentials missing"
             
             html_body = f"""
@@ -404,7 +404,7 @@ class EmailService:
                 <body>
                     <div class="container">
                         <div class="header">
-                            <h2>✅ Confirmation: Request Declined</h2>
+                            <h2>Confirmation: Request Declined</h2>
                         </div>
                         <div class="content">
                             <p>Hi <strong>{employee_name}</strong>,</p>
@@ -427,20 +427,20 @@ class EmailService:
             
             logger.info(f"Connecting to {smtp_server}:465 with SSL...")
             with smtplib.SMTP_SSL(smtp_server, 465, timeout=10) as server:
-                logger.info("✓ Connected to SMTP server with SSL")
+                logger.info("Connected to SMTP server with SSL")
                 logger.info(f"Logging in as {sender_email}...")
                 server.login(sender_email, sender_password)
-                logger.info("✓ Logged in successfully")
+                logger.info("Logged in successfully")
                 logger.info("Sending email...")
                 server.sendmail(sender_email, employee_email, msg.as_string())
-                logger.info("✓ Email sent successfully")
+                logger.info("Email sent successfully")
             
             logger.info("=" * 60)
-            logger.info(f"✓ Employee rejection confirmation sent to {employee_email}")
+            logger.info(f"SUCCESS: Employee rejection confirmation sent to {employee_email}")
             logger.info("=" * 60)
             return True, None
         
         except Exception as e:
-            logger.error(f"✗ Failed to send rejection confirmation: {str(e)}")
+            logger.error(f"Failed to send rejection confirmation: {str(e)}")
             logger.exception("Full traceback:")
             return False, str(e)
