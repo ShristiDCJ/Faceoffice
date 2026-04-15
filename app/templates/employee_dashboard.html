@@ -20,14 +20,20 @@
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
-<script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script><script>
 async function loadRequests() {
     try {
+        console.log('Loading requests...');
         const response = await fetch('/employee/dashboard/requests');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
+        console.log('Requests received:', data);
 
-        if (data.requests.length === 0) {
+        if (!data.requests || data.requests.length === 0) {
             document.getElementById('requestsList').innerHTML = '<p>No pending requests at this time.</p>';
             return;
         }
@@ -43,8 +49,8 @@ async function loadRequests() {
                         <p><strong>Requested:</strong> ${new Date(request.created_at).toLocaleString()}</p>
                     </div>
                     <div class="request-actions">
-                        <button class="btn btn-success" onclick="acceptRequest(${request.id})">Accept</button>
-                        <button class="btn btn-danger" onclick="rejectRequest(${request.id})">Reject</button>
+                        <button class="btn btn-success" onclick="acceptRequest('${request.id}')">Accept</button>
+                        <button class="btn btn-danger" onclick="rejectRequest('${request.id}')">Reject</button>
                     </div>
                 </div>
             `;
@@ -52,6 +58,7 @@ async function loadRequests() {
 
         document.getElementById('requestsList').innerHTML = html;
     } catch (e) {
+        console.error('Error:', e);
         document.getElementById('requestsList').innerHTML = `<p class="error">Error loading requests: ${e.message}</p>`;
     }
 }
@@ -60,11 +67,12 @@ async function acceptRequest(requestId) {
     if (!confirm('Accept this visitor request?')) return;
 
     try {
+        console.log('Accepting request:', requestId);
         const response = await fetch(`/employee/accept/${requestId}`, { method: 'POST' });
         const data = await response.json();
 
         if (response.ok) {
-            alert('Request accepted. Visitor has been notified via SMS.');
+            alert('Request accepted. Visitor has been notified via email.');
             loadRequests();
         } else {
             alert(data.error || 'Error accepting request');
@@ -78,11 +86,12 @@ async function rejectRequest(requestId) {
     if (!confirm('Reject this visitor request?')) return;
 
     try {
+        console.log('Rejecting request:', requestId);
         const response = await fetch(`/employee/reject/${requestId}`, { method: 'POST' });
         const data = await response.json();
 
         if (response.ok) {
-            alert('Request rejected. Visitor has been notified via SMS.');
+            alert('Request rejected. Visitor has been notified via email.');
             loadRequests();
         } else {
             alert(data.error || 'Error rejecting request');
@@ -92,8 +101,8 @@ async function rejectRequest(requestId) {
     }
 }
 
-// Load requests on page load and refresh every 10 seconds
+// Load requests on page load and refresh every 5 seconds
 loadRequests();
-setInterval(loadRequests, 10000);
+setInterval(loadRequests, 5000);
 </script>
 {% endblock %}
