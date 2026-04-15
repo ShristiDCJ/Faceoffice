@@ -17,6 +17,9 @@ def kiosk():
 def submit_request():
     """Submit visitor meeting request with facial photo - PHASE 2"""
     try:
+        # Log incoming data
+        logger.info(f"Form data received: {request.form.keys()}")
+        
         visitor_name = request.form.get('visitorName')
         employee_name = request.form.get('employeeContact')
         visitor_email = request.form.get('visitorEmail')
@@ -25,16 +28,46 @@ def submit_request():
 
         # Validate inputs
         if not all([visitor_name, employee_name, visitor_email, visitor_phone, face_image]):
-            return jsonify({'error': 'Missing required fields'}), 400
+            missing = []
+            if not visitor_name: missing.append('visitorName')
+            if not employee_name: missing.append('employeeContact')
+            if not visitor_email: missing.append('visitorEmail')
+            if not visitor_phone: missing.append('phoneNumber')
+            if not face_image: missing.append('faceImage')
+            
+            logger.error(f"Missing fields: {missing}")
+            return jsonify({'error': f'Missing required fields: {", ".join(missing)}'}), 400
 
-        # Find employee in Firebase by name
+        logger.info(f"Looking for employee: {employee_name}")
+
+        # Try to find employee in Firebase first
         employee_id, employee = FirebaseService.get_employee_by_name(employee_name)
+        
+        # If not in Firebase, try SQLite
         if not employee_id:
-            return jsonify({'error': f'Employee "{employee_name}" not found'}), 404
+            logger.info(f"Employee not in Firebase, checking SQLite...")
+            emp_obj = Employee.query.filter_by(name=employee_name).first()
+            if not emp_obj:
+                logger.error(f"Employee '{employee_name}' not found in either database")
+                return jsonify({'error': f'Employee "{employee_name}" not found. Please check the name and try again.'}), 404
+            
+            # Create Firebase entry for this employee if it doesn't exist
+            employee_id, firebase_error = FirebaseService.create_employee(
+                name=emp_obj.name,
+                email=emp_obj.email,
+                phone=emp_obj.phone,
+                face_encoding=emp_obj.get_face_encoding()
+            )
+            if firebase_error:
+                logger.warning(f"Failed to sync employee to Firebase: {firebase_error}")
+            employee = {'name': emp_obj.name, 'email': emp_obj.email}
+
+        logger.info(f"Found employee: {employee_id}")
 
         # Encode visitor face
         visitor_encoding, error = facial_recognition.capture_and_encode_face(face_image)
         if error:
+            logger.error(f"Face encoding failed: {error}")
             return jsonify({'error': error}), 400
 
         # Upload photo to Cloudinary
@@ -45,6 +78,7 @@ def submit_request():
             logger.warning(f'⚠️ Cloudinary upload failed, using placeholder: {error}')
 
         # Create visitor request - AUTO-TRIGGERS EMAIL
+        logger.info(f"Creating visitor request for {visitor_name} to meet {employee_name}")
         request_id, error = FirebaseRequestHandler.create_visitor_request(
             visitor_name=visitor_name,
             visitor_email=visitor_email,
@@ -55,6 +89,7 @@ def submit_request():
         )
 
         if error:
+            logger.error(f"Failed to create request: {error}")
             return jsonify({'error': error}), 500
 
         # Also save to SQLite for backup (optional)
@@ -71,9 +106,11 @@ def submit_request():
                 visitor_req.set_face_encoding(visitor_encoding)
                 db.session.add(visitor_req)
                 db.session.commit()
+                logger.info(f"Request also saved to SQLite")
         except Exception as e:
             logger.warning(f"⚠️ SQLite backup failed: {str(e)}")
 
+        logger.info(f"✓ Request created successfully: {request_id}")
         return jsonify({
             'success': True,
             'message': 'Request submitted successfully. Employee notification sent!',
@@ -81,7 +118,7 @@ def submit_request():
         }), 201
 
     except Exception as e:
-        logger.error(f"✗ Error in submit_request: {str(e)}")
+        logger.error(f"✗ Error in submit_request: {str(e)}", exc_info=True)
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
 @visitor_bp.route('/check-status/<request_id>', methods=['GET'])
