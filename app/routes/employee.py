@@ -30,36 +30,25 @@ def get_requests():
     try:
         employee_id = session.get('employee_id')
         logger.info(f"\n--- FETCHING REQUESTS ---")
-        logger.info(f"Employee ID from session: {employee_id} (type: {type(employee_id)})")
+        logger.info(f"Employee ID from session: {employee_id}")
         
-        # First, try to sync this employee to Firebase if needed
-        try:
-            emp_sqlite = None
-            if isinstance(employee_id, int):
-                emp_sqlite = VisitorRequest.query.filter_by(employee_id=employee_id).first()
-                if emp_sqlite:
-                    emp_sqlite = emp_sqlite.employee
-            
-            if emp_sqlite and not FirebaseService.get_employee_by_email(emp_sqlite.email)[0]:
-                logger.info(f"Syncing employee {emp_sqlite.name} to Firebase...")
-                sync_id, _ = FirebaseService.create_employee(
-                    name=emp_sqlite.name,
-                    email=emp_sqlite.email,
-                    phone=emp_sqlite.phone,
-                    face_encoding=emp_sqlite.get_face_encoding()
-                )
-                if sync_id:
-                    logger.info(f"✓ Synced with Firebase ID: {sync_id}")
-                    # Update session with Firebase ID
-                    session['firebase_employee_id'] = sync_id
-        except Exception as e:
-            logger.warning(f"⚠️ Could not sync employee to Firebase: {str(e)}")
+        # Get employee email from SQLite (we know the numeric ID from session)
+        emp_sqlite = None
+        if isinstance(employee_id, int):
+            from app.models import Employee
+            emp_sqlite = Employee.query.get(employee_id)
         
-        # Try Firebase first
-        firebase_emp_id = session.get('firebase_employee_id', employee_id)
-        logger.info(f"Trying Firebase with ID: {firebase_emp_id}")
+        if not emp_sqlite:
+            logger.error(f"Employee {employee_id} not found in SQLite")
+            return jsonify({'error': 'Employee not found'}), 404
         
-        pending_requests, error = FirebaseService.get_pending_requests_for_employee(firebase_emp_id)
+        employee_email = emp_sqlite.email
+        logger.info(f"Employee Email: {employee_email}")
+        logger.info(f"Employee Name: {emp_sqlite.name}")
+        
+        # Fetch pending requests from Firebase by EMAIL (not ID)
+        logger.info(f"Fetching requests from Firebase for {employee_email}...")
+        pending_requests, error = FirebaseService.get_pending_requests_for_employee(employee_email)
         
         if error:
             logger.warning(f"⚠️ Firebase fetch error: {error}")
@@ -81,13 +70,13 @@ def get_requests():
             requests_data.append(request_data)
             logger.info(f"  - Request {req.get('id')}: {req.get('visitor_name')} ({req.get('status')})")
 
-        logger.info(f"Returning {len(requests_data)} requests to dashboard")
+        logger.info(f"Returning {len(requests_data)} requests to dashboard\n")
         return jsonify({'requests': requests_data}), 200
 
     except Exception as e:
         logger.error(f"✗ Error in get_requests: {str(e)}", exc_info=True)
         return jsonify({'error': f'Server error: {str(e)}'}), 500
-
+        
 @employee_bp.route('/accept/<request_id>', methods=['POST'])
 @login_required
 def accept_request(request_id):
