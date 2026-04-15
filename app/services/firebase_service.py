@@ -195,14 +195,14 @@ class FirebaseService:
             ref = db.reference('visitor_requests')
             all_requests = ref.get()
             pending_requests = []
-            
+        
             if all_requests:
                 for req_id, req_data in all_requests.items():
                     # Get employee data to compare email
-                    emp_data = FirebaseService.get_employee(req_data.get('employee_id'))[0]
+                    emp_data, _ = FirebaseService.get_employee(req_data.get('employee_id'))
                     if (emp_data and emp_data.get('email') == employee_email and 
                         req_data.get('status') == 'pending'):
-                            pending_requests.append({'id': req_id, **req_data})
+                        pending_requests.append({'id': req_id, **req_data})
             
             return pending_requests, None
         except Exception as e:
