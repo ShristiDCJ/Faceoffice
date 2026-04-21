@@ -3,6 +3,7 @@ from app.routes import admin_bp
 from app.models import db, Employee, EmployeeFaceLogin, VisitorRequest
 from app.services import facial_recognition
 from app.services.firebase_service import FirebaseService
+from werkzeug.security import generate_password_hash
 import os
 import logging
 
@@ -24,11 +25,15 @@ def register_employee():
         name = request.form.get('name')
         email = request.form.get('email')
         phone = request.form.get('phone')
+        password = request.form.get('password')
         face_image = request.form.get('faceImage')
 
         # Validate inputs
-        if not all([name, email, phone, face_image]):
-            return jsonify({'error': 'Missing required fields'}), 400
+        if not all([name, email, phone, password, face_image]):
+            return jsonify({'error': 'Missing required fields (name, email, phone, password, face)'}), 400
+
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters long'}), 400
 
         # Check for duplicates in SQLite
         if Employee.query.filter_by(email=email).first():
@@ -46,7 +51,8 @@ def register_employee():
         employee = Employee(
             name=name,
             email=email,
-            phone=phone
+            phone=phone,
+            password_hash=generate_password_hash(password)
         )
         employee.set_face_encoding(face_encoding)
 
@@ -63,7 +69,7 @@ def register_employee():
         db.session.commit()
 
         # ===== FIREBASE SYNC (NEW) =====
-        # Also save to Firebase Realtime Database
+        # Also save to Firebase Realtime Database (no password)
         employee_id_firebase, firebase_error = FirebaseService.create_employee(
             name=name,
             email=email,
@@ -75,6 +81,8 @@ def register_employee():
             logger.warning(f"⚠️ Firebase sync failed but employee was created in SQLite: {firebase_error}")
         else:
             logger.info(f"✓ Employee also saved to Firebase with ID: {employee_id_firebase}")
+
+        logger.info(f"✓ Employee {name} registered with password hash")
 
         return jsonify({
             'success': True,
@@ -145,3 +153,4 @@ def delete_employee(employee_id):
         db.session.rollback()
         logger.error(f"✗ Error in delete_employee: {str(e)}")
         return jsonify({'error': f'Server error: {str(e)}'}), 500
+
