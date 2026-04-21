@@ -3,10 +3,11 @@ from app.routes import auth_bp
 from app.models import db, Employee, EmployeeFaceLogin
 from app.services import facial_recognition
 from app import create_app
+from werkzeug.security import check_password_hash
 
 @auth_bp.route('/login', methods=['GET'])
 def login():
-    """Employee facial login page"""
+    """Employee login page (face or password)"""
     return render_template('employee_login.html')
 
 @auth_bp.route('/verify', methods=['POST'])
@@ -53,8 +54,42 @@ def verify():
     except Exception as e:
         return jsonify({'error': f'Server error: {str(e)}'}), 500
 
+@auth_bp.route('/login/password', methods=['POST'])
+def login_password():
+    """Login employee with email and password"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({'error': 'Email and password required'}), 400
+
+        employee = Employee.query.filter_by(email=email).first()
+        if not employee:
+            return jsonify({'error': 'Employee not found'}), 401
+
+        if not check_password_hash(employee.password_hash, password):
+            return jsonify({'error': 'Invalid password'}), 401
+
+        # Create session (same as face login)
+        session['employee_id'] = employee.id
+        session['employee_name'] = employee.name
+        session['employee_email'] = employee.email
+
+        return jsonify({
+            'success': True,
+            'message': f'Welcome {employee.name}',
+            'employee_id': employee.id
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
 @auth_bp.route('/logout', methods=['POST'])
 def logout():
     """Logout employee"""
     session.clear()
     return jsonify({'success': True, 'message': 'Logged out'}), 200
+
