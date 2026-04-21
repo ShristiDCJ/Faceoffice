@@ -20,7 +20,7 @@ def init_database():
         print("[OK] All tables created:")
         print("  - employees")
         print("  - visitor_requests")
-        print("  - employee_face_login")
+        print("  - employee_face_logins (with password support)")
         print("\n[OK] Database ready for use!")
         print("[OK] You can now:")
         print("  1. Start the Flask app: python app.py")
