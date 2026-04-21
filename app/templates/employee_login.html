@@ -4,10 +4,17 @@
 
 {% block content %}
 <div class="page-container login-page">
-    <h2>Employee Facial Login</h2>
-    <p>Look at the camera and we'll verify your identity.</p>
+    <h2>Employee Login</h2>
+    <p>Choose your preferred login method.</p>
 
-    <div class="login-container">
+    <!-- Login Tabs -->
+    <div class="login-tabs">
+        <button class="tab-btn active" onclick="switchTab('face')">Face Recognition</button>
+        <button class="tab-btn" onclick="switchTab('password')">Password</button>
+    </div>
+
+    <!-- Face Login Tab -->
+    <div id="face-tab" class="tab-content active">
         <div class="camera-section">
             <video id="cameraFeed" class="camera-video"></video>
             <div class="camera-controls">
@@ -15,24 +22,92 @@
                 <button type="button" id="capturePhoto" class="btn btn-success" disabled>Capture Face</button>
                 <button type="button" id="stopCamera" class="btn btn-danger" disabled>Stop Camera</button>
             </div>
-
             <canvas id="photoCanvas" style="display:none;"></canvas>
         </div>
-
-        <div id="statusMessage" class="status-message"></div>
     </div>
+
+    <!-- Password Login Tab -->
+    <div id="password-tab" class="tab-content">
+        <form id="passwordForm" class="form-container">
+            <div class="form-group">
+                <label for="loginEmail">Email *</label>
+                <input type="email" id="loginEmail" required>
+            </div>
+            <div class="form-group">
+                <label for="loginPassword">Password *</label>
+                <input type="password" id="loginPassword" required minlength="8">
+            </div>
+            <button type="submit" class="btn btn-primary full-width">Login with Password</button>
+        </form>
+    </div>
+
+    <div id="statusMessage" class="status-message"></div>
 </div>
+
+<style>
+.login-tabs {
+    display: flex;
+    margin-bottom: 2rem;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 1rem;
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: #666;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s;
+}
+
+.tab-btn.active {
+    color: #667eea;
+    border-bottom-color: #667eea;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.full-width {
+    width: 100%;
+}
+</style>
 
 <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
 <script>
-let faceDataUrl = null;
+function switchTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    
+    // Show selected tab
+    document.getElementById(tabName + '-tab').classList.add('active');
+    event.target.classList.add('active');
+    
+    // Reset camera if switching away
+    if (tabName !== 'face') {
+        const video = document.getElementById('cameraFeed');
+        if (!video.paused) {
+            video.pause();
+        }
+    }
+}
 
+// Face login (existing)
 document.getElementById('capturePhoto').addEventListener('click', async function() {
     const canvas = document.getElementById('photoCanvas');
-    faceDataUrl = canvas.toDataURL('image/jpeg');
+    const faceDataUrl = canvas.toDataURL('image/jpeg');
 
-    document.getElementById('statusMessage').textContent = 'Processing face... please wait.';
-    document.getElementById('statusMessage').className = 'status-message info';
+    showStatus('Processing face... please wait.', 'info');
 
     try {
         const response = await fetch('/auth/verify', {
@@ -44,17 +119,55 @@ document.getElementById('capturePhoto').addEventListener('click', async function
         const data = await response.json();
 
         if (response.ok) {
-            document.getElementById('statusMessage').textContent = 'Face verified! Redirecting to dashboard...';
-            document.getElementById('statusMessage').className = 'status-message success';
+            showStatus('Face verified! Redirecting...', 'success');
             setTimeout(() => window.location.href = '/employee/dashboard', 2000);
         } else {
-            document.getElementById('statusMessage').textContent = data.error || 'Face not recognized. Please try again.';
-            document.getElementById('statusMessage').className = 'status-message error';
+            showStatus(data.error || 'Face not recognized.', 'error');
         }
     } catch (e) {
-        document.getElementById('statusMessage').textContent = 'Error: ' + e.message;
-        document.getElementById('statusMessage').className = 'status-message error';
+        showStatus('Error: ' + e.message, 'error');
     }
 });
+
+// Password login
+document.getElementById('passwordForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const email = document.getElementById('loginEmail').value;
+    const password = document.getElementById('loginPassword').value;
+
+    if (!email || !password) {
+        showStatus('Please enter email and password.', 'error');
+        return;
+    }
+
+    showStatus('Logging in...', 'info');
+
+    try {
+        const response = await fetch('/auth/login/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showStatus('Login successful! Redirecting...', 'success');
+            setTimeout(() => window.location.href = '/employee/dashboard', 2000);
+        } else {
+            showStatus(data.error || 'Login failed.', 'error');
+        }
+    } catch (e) {
+        showStatus('Error: ' + e.message, 'error');
+    }
+});
+
+function showStatus(message, type) {
+    const status = document.getElementById('statusMessage');
+    status.textContent = message;
+    status.className = `status-message ${type}`;
+}
 </script>
 {% endblock %}
+
