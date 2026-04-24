@@ -228,6 +228,29 @@ class FirebaseService:
             return [], str(e)
     
     @staticmethod
+    def get_all_pending_requests():
+        """Get ALL pending visitor requests across all employees"""
+        try:
+            ref = db.reference('visitor_requests')
+            all_requests = ref.get()
+            pending_requests = []
+
+            if all_requests:
+                for req_id, req_data in all_requests.items():
+                    if req_data.get('status') == 'pending':
+                        # Fetch employee details to include name/email
+                        emp_data, _ = FirebaseService.get_employee(req_data.get('employee_id'))
+                        req_data['employee_name'] = emp_data.get('name') if emp_data else 'Unknown'
+                        req_data['employee_email'] = emp_data.get('email') if emp_data else 'Unknown'
+                        pending_requests.append({'id': req_id, **req_data})
+
+            return pending_requests, None
+
+        except Exception as e:
+            logger.error(f"Error fetching all pending requests: {str(e)}")
+            return [], str(e)
+
+    @staticmethod
     def get_all_requests_for_employee(employee_id):
         """Get all requests (pending, accepted, rejected) for employee"""
         try:
