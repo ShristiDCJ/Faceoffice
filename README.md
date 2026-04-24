@@ -1,6 +1,6 @@
 # Faceoffice - Facial Recognition Visitor Authentication System
 
-A modern visitor authentication system using facial recognition to streamline visitor check-ins and instant push notifications to employees.
+A modern visitor authentication system using facial recognition to streamline visitor check-ins and email notifications to employees.
 
 ## Features
 
@@ -8,24 +8,30 @@ A modern visitor authentication system using facial recognition to streamline vi
 
 ✅ **Employee Facial Login** - Facial recognition-based authentication (no passwords needed)
 
+✅ **Employee Password Login** - Alternative password-based login for employees
+
 ✅ **Employee Dashboard** - View, accept, or reject visitor requests with photos
 
 ✅ **Admin Panel** - Register and manage employees with facial enrollment
 
-✅ **Smart Notifications** - Email + Push Notifications (Firebase Cloud Messaging) to employees
+✅ **Admin Request Approval** - Admin can view all pending requests and approve/reject on behalf of employees
 
-✅ **Auto-Reminders** - Push notification reminder after 2 minutes if no response from employee
+✅ **Smart Email Notifications** - Brevo SMTP email alerts to employees and visitors
+
+✅ **Auto-Reminders** - Email reminder after 2 minutes if no response from employee
 
 ✅ **Cloud Photo Storage** - Visitor photos stored securely on Cloudinary
+
+✅ **Firebase Realtime Database** - Primary data store for employees and visitor requests (SQLite as backup)
 
 ## Tech Stack
 
 - **Backend**: Python + Flask 3.0
-- **Database**: SQLite
+- **Database**: Firebase Realtime Database (primary), SQLite (local backup)
 - **Facial Recognition**: OpenCV (Haar Cascades)
 - **Photo Storage**: Cloudinary
-- **Notifications**: Firebase Cloud Messaging (Push) + Flask-Mail (Email)
-- **Background Tasks**: APScheduler
+- **Email Notifications**: Brevo SMTP (via `email_service.py`) + Flask-Mail (legacy)
+- **Background Tasks**: APScheduler (2-minute email reminders)
 - **Hosting**: Render (or any Python-capable cloud platform)
 
 ## Project Structure
@@ -33,34 +39,44 @@ A modern visitor authentication system using facial recognition to streamline vi
 ```
 faceoffice/
 ├── app.py                          # Entry point
-├── config.py                       # Flask configuration
+├── wsgi.py                         # WSGI entry for production
+├── config.py                       # Flask configuration (dev/prod/test)
 ├── requirements.txt                # Python dependencies
 ├── .env                            # Environment variables (create from template)
 ├── firebase-key.json               # Firebase service account (download from Firebase)
 ├── Procfile                        # Render deployment config
+├── init_db.py                      # Initialize SQLite database
+├── test_email_flow.py              # Email flow test script
+├── EMAIL_TESTING_GUIDE.md          # Email testing documentation
 ├── app/
 │   ├── __init__.py                # Flask app factory
 │   ├── models.py                  # SQLAlchemy database models
 │   ├── routes/
+│   │   ├── __init__.py            # Blueprint definitions
 │   │   ├── visitor.py             # Visitor kiosk endpoints
-│   │   ├── auth.py                # Employee facial login
+│   │   ├── auth.py                # Employee face + password login
 │   │   ├── employee.py            # Employee dashboard endpoints
-│   │   └── admin.py               # Admin employee management
+│   │   └── admin.py               # Admin employee & request management
 │   ├── services/
 │   │   ├── facial_recognition.py  # Face detection with OpenCV
-│   │   ├── notification.py        # Email + Firebase push notifications
+│   │   ├── email_service.py       # Brevo SMTP email sender
+│   │   ├── notification.py        # Flask-Mail email + APScheduler reminders
 │   │   ├── cloudinary_service.py  # Photo upload to Cloudinary
-│   │   └── request_handler.py     # Business logic layer
+│   │   ├── firebase_service.py    # Firebase Realtime DB CRUD
+│   │   ├── firebase_request_handler.py  # Request lifecycle + Brevo emails
+│   │   └── request_handler.py     # Legacy SQLite request handler
 │   └── templates/
 │       ├── base.html              # Base HTML template
 │       ├── visitor.html           # Visitor kiosk page
-│       ├── employee_login.html    # Facial recognition login
+│       ├── employee_login.html    # Face + password login tabs
 │       ├── employee_dashboard.html # Visitor request management
-│       ├── admin_register.html    # Employee registration form
-│       └── admin_employees.html   # Employee list management
+│       ├── admin_register.html    # Employee registration form (with password)
+│       ├── admin_employees.html   # Employee list management
+│       └── admin_requests.html    # Admin pending requests approval
 ├── static/
 │   ├── css/style.css              # Custom styling
 │   └── js/camera.js               # WebRTC camera handling
+│   └── js/dashboard.js            # Dashboard interactions
 └── instance/
     └── faceoffice.db              # SQLite database (auto-created)
 ```
@@ -93,7 +109,7 @@ Create `.env` file in project root:
 
 ```bash
 FLASK_ENV=development
-[REDACTED_GENERIC_SECRET_1]=your-secret-key-here
+SECRET_KEY=your-secret-key-here
 
 # Database
 DATABASE_URL=sqlite:///faceoffice.db
@@ -101,40 +117,50 @@ DATABASE_URL=sqlite:///faceoffice.db
 # Cloudinary (Photo Storage)
 CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=your-api-key
-CLOUDINARY_API_[REDACTED_GENERIC_SECRET_2]=your-api-secret
+CLOUDINARY_API_SECRET=your-api-secret
 
-# Firebase (Push Notifications)
+# Firebase Realtime Database
 FIREBASE_KEY_PATH=firebase-key.json
+FIREBASE_DB_URL=https://your-project-default-rtdb.firebaseio.com
 
-# Email Notifications
-MAIL_SERVER=smtp.gmail.com
+# Brevo SMTP (Primary Email)
+BREVO_API_KEY=your-brevo-api-key
+MAIL_FROM_EMAIL=noreply@faceoffice.com
+
+# Flask-Mail / Legacy SMTP (Optional fallback)
+MAIL_SERVER=smtp-relay.brevo.com
 MAIL_PORT=587
 MAIL_USE_TLS=True
-MAIL_USERNAME=shristi.extra.college@gmail.com
-MAIL_[REDACTED_GENERIC_PASSWORD_5]=Shristi@2510
-MAIL_DEFAULT_SENDER=shristi.extra.college@gmail.com
+MAIL_USERNAME=apikey
+MAIL_PASSWORD=your-brevo-api-key
+MAIL_DEFAULT_SENDER=noreply@faceoffice.com
 
 # App Configuration
 APP_URL=http://localhost:5000
+
+# Admin Panel Password (change in production!)
+ADMIN_PASSWORD=admin-change-in-production
 ```
 
-### 5. Firebase Cloud Messaging Setup
+### 5. Firebase Realtime Database Setup
 
 1. **Create Firebase Project:**
    - Go to [Firebase Console](https://console.firebase.google.com)
    - Click "Create Project" and name it (e.g., "Faceoffice")
    - Enable Google Analytics (optional)
 
-2. **Download Service Account Key:**
+2. **Enable Realtime Database:**
+   - In Firebase Console, go to "Build" → "Realtime Database"
+   - Click "Create Database"
+   - Choose "Start in test mode" (or set security rules for production)
+   - Copy the database URL (e.g., `https://your-project-default-rtdb.firebaseio.com`)
+
+3. **Download Service Account Key:**
    - In Firebase Console, go to Project Settings ⚙️
    - Click "Service Accounts" tab
    - Click "Generate New Private Key"
    - Save the JSON file as `firebase-key.json` in your project root
-   - This file enables backend push notifications
-
-3. **Initialize Firebase in Frontend (Optional):**
-   - For web push notifications (if using web app), follow Firebase docs
-   - For mobile apps, use Firebase Admin SDK client
+   - This file enables backend access to Realtime Database
 
 ### 6. Cloudinary Setup (Photo Storage)
 
@@ -146,28 +172,35 @@ APP_URL=http://localhost:5000
    ```
    CLOUDINARY_CLOUD_NAME=your-cloud-name
    CLOUDINARY_API_KEY=your-api-key
-   CLOUDINARY_API_[REDACTED_GENERIC_SECRET_2]=your-api-secret
+   CLOUDINARY_API_SECRET=your-api-secret
    ```
 
-### 7. Email Notifications Setup (Gmail)
+### 7. Brevo Email Setup
 
-1. **Enable 2-Factor Authentication on Gmail:**
-   - Go to [Google Account Security](https://myaccount.google.com/security)
-   - Enable 2-Step Verification
+1. **Create Brevo Account:**
+   - Sign up at [brevo.com](https://www.brevo.com) (free tier available)
+   - Go to "SMTP & API" → "API Keys"
+   - Generate an API key
 
-2. **Create App Password:**
-   - Go to [App Passwords](https://myaccount.google.com/apppasswords)
-   - Select "Mail" and "Windows Computer"
-   - Google generates a 16-character app password
-   - Copy to `.env` as MAIL_PASSWORD
-
-3. **Add to `.env`:**
+2. **Add to `.env`:**
    ```
-   MAIL_USERNAME=your-email@gmail.com
-   MAIL_[REDACTED_GENERIC_PASSWORD_5]=your-16-char-app-password
+   BREVO_API_KEY=your-brevo-api-key
+   MAIL_FROM_EMAIL=noreply@faceoffice.com
    ```
 
-### 8. Run Application
+3. **Sender Verification:**
+   - In Brevo dashboard, verify your sender domain or email address
+   - Without verification, emails may land in spam
+
+### 8. Initialize Database
+
+```bash
+python init_db.py
+```
+
+This creates the SQLite tables (`employees`, `visitor_requests`, `employee_face_logins`).
+
+### 9. Run Application
 
 ```bash
 python app.py
@@ -180,30 +213,40 @@ Open browser to `http://localhost:5000`
 ### Admin: Register Employee
 
 1. Navigate to `http://localhost:5000/admin/register`
-2. Enter employee name, email, phone number
+2. Enter employee name, email, phone number, and password (min 8 characters)
 3. Capture their facial photo (good lighting, face visible)
-4. Employee is registered and can now login via facial recognition
+4. Employee is registered in both Firebase and SQLite
+5. Employee can now login via facial recognition or password
 
 ### Visitor: Submit Request
 
 1. Go to `http://localhost:5000/visitor`
-2. Enter your name, target employee, and phone number
+2. Enter your name, target employee name, email, and phone number
 3. Capture your facial photo
-4. Request submitted!
+4. Request submitted! Employee receives an email notification instantly
 
 ### Employee: Review & Respond
 
 1. Go to `http://localhost:5000/auth/login`
-2. Align face with camera, system auto-verifies
+2. Choose login method:
+   - **Face Recognition tab**: Align face with camera, system auto-verifies
+   - **Password tab**: Enter email and password
 3. Dashboard shows pending visitor requests with photos
 4. Click Accept or Reject
-5. Visitor receives instant push notification with response
+5. Visitor receives an email with the response
+
+### Admin: Manage Pending Requests
+
+1. Navigate to `http://localhost:5000/admin/requests`
+2. View all pending visitor requests across all employees
+3. Click Accept or Reject on behalf of an employee
+4. Both visitor and employee receive email confirmations
 
 ### Automatic Reminder
 
 - If employee doesn't respond within 2 minutes
-- Visitor automatically receives a push notification reminder
-- Visitor can check updated status on their device
+- Employee automatically receives a reminder email
+- Employee can then accept/reject from the dashboard
 
 ## API Endpoints
 
@@ -212,6 +255,12 @@ Open browser to `http://localhost:5000`
 - `POST /visitor/submit-request` - Submit meeting request with photo
 - `GET /visitor/check-status/<id>` - Check request status
 
+### Auth Routes
+- `GET /auth/login` - Employee login page (face + password tabs)
+- `POST /auth/verify` - Server-side facial verification
+- `POST /auth/login/password` - Password-based login
+- `POST /auth/logout` - Logout from session
+
 ### Employee Routes
 - `GET /employee/dashboard` - View pending requests
 - `GET /employee/dashboard/requests` - Get requests as JSON
@@ -219,17 +268,16 @@ Open browser to `http://localhost:5000`
 - `POST /employee/reject/<id>` - Reject visitor request
 - `POST /employee/logout` - Logout
 
-### Auth Routes
-- `GET /auth/login` - Facial recognition login page
-- `POST /auth/verify` - Server-side facial verification
-- `POST /auth/logout` - Logout from session
-
 ### Admin Routes
 - `GET /admin/register` - Employee registration form
 - `POST /admin/register` - Register new employee
 - `GET /admin/employees` - Employee list interface
 - `GET /admin/employees/list` - Get employees as JSON
 - `DELETE /admin/employees/<id>` - Remove employee
+- `GET /admin/requests` - Admin pending requests page
+- `GET /admin/requests/list` - Get all pending requests (API)
+- `POST /admin/requests/<id>/accept` - Admin accepts request on behalf of employee
+- `POST /admin/requests/<id>/reject` - Admin rejects request on behalf of employee
 
 ## Deployment on Render
 
@@ -251,7 +299,7 @@ git push -u origin main
 3. Connect your GitHub repository
 4. Configure:
    - **Build Command:** `pip install -r requirements.txt`
-   - **Start Command:** `gunicorn app:app`
+   - **Start Command:** `gunicorn wsgi:application` (or `gunicorn app:app`)
    - **Instance Type:** Free (or Starter for production)
 
 ### 3. Set Environment Variables
@@ -260,19 +308,23 @@ In Render Dashboard → Environment:
 
 ```
 FLASK_ENV=production
-[REDACTED_GENERIC_SECRET_1]=<strong-random-key>
+SECRET_KEY=<strong-random-key>
 DATABASE_URL=sqlite:///faceoffice.db
 CLOUDINARY_CLOUD_NAME=...
 CLOUDINARY_API_KEY=...
-CLOUDINARY_API_[REDACTED_GENERIC_SECRET_2]=...
+CLOUDINARY_API_SECRET=...
 FIREBASE_KEY_PATH=firebase-key.json
-MAIL_SERVER=smtp.gmail.com
+FIREBASE_DB_URL=https://your-project-default-rtdb.firebaseio.com
+BREVO_API_KEY=...
+MAIL_FROM_EMAIL=noreply@faceoffice.com
+MAIL_SERVER=smtp-relay.brevo.com
 MAIL_PORT=587
 MAIL_USE_TLS=True
-MAIL_USERNAME=...
-MAIL_[REDACTED_GENERIC_PASSWORD_5]=...
+MAIL_USERNAME=apikey
+MAIL_PASSWORD=...
 MAIL_DEFAULT_SENDER=...
 APP_URL=https://your-app-name.onrender.com
+ADMIN_PASSWORD=<change-me>
 ```
 
 ### 4. Add Firebase Key to Render
@@ -280,7 +332,7 @@ APP_URL=https://your-app-name.onrender.com
 **Option A: Upload as File**
 - In Render dashboard, add `firebase-key.json` to project files
 
-**Option B: Environment Variable**
+**Option B: Environment Variable (Base64)**
 - Convert `firebase-key.json` to base64
 - Store as environment variable
 - Decode in app startup
@@ -291,23 +343,23 @@ Push to GitHub or click "Deploy" in Render dashboard. Your app will be live at `
 
 ## Database Schema
 
-### Employees Table
+### Employees Table (SQLite)
 ```sql
 id (PRIMARY KEY)
 name (UNIQUE)
 email (UNIQUE)
 phone (UNIQUE)
+password_hash (TEXT) -- Werkzeug hashed password
 face_encoding (Binary) -- Serialized numpy array for login
-fcm_token (TEXT) -- Firebase Cloud Messaging token
 created_at (DATETIME)
 ```
 
-### Visitor Requests Table
+### Visitor Requests Table (SQLite)
 ```sql
 id (PRIMARY KEY)
 visitor_name
 visitor_phone
-visitor_fcm_token (TEXT) -- Push notification token
+visitor_email (TEXT) -- Required for email confirmations
 employee_id (FOREIGN KEY)
 photo_url (Cloudinary URL)
 face_encoding (Binary) -- Visitor's facial encoding
@@ -317,7 +369,7 @@ responded_at (DATETIME)
 reminder_sent (BOOLEAN)
 ```
 
-### Employee Face Logins Table
+### Employee Face Logins Table (SQLite)
 ```sql
 id (PRIMARY KEY)
 employee_id (FOREIGN KEY, UNIQUE)
@@ -325,14 +377,43 @@ face_encoding (Binary)
 registered_at (DATETIME)
 ```
 
+### Firebase Realtime Database Structure
+```json
+{
+  "employees": {
+    "<firebase_id>": {
+      "name": "...",
+      "email": "...",
+      "phone": "...",
+      "face_encoding": "<base64>",
+      "created_at": "..."
+    }
+  },
+  "visitor_requests": {
+    "<request_id>": {
+      "visitor_name": "...",
+      "visitor_email": "...",
+      "visitor_phone": "...",
+      "employee_id": "<firebase_employee_id>",
+      "photo_url": "...",
+      "face_encoding": "<base64>",
+      "status": "pending",
+      "created_at": "...",
+      "responded_at": null,
+      "reminder_sent": false
+    }
+  }
+}
+```
+
 ## Security Features
 
-✅ **Facial Authentication** - No passwords, face-based login  
+✅ **Facial Authentication** - No passwords required for face-based login  
+✅ **Password Hashing** - Werkzeug `generate_password_hash` for password storage  
 ✅ **Session Security** - Secure cookies with HTTPONLY flag  
 ✅ **HTTPS** - Enforced in production  
-✅ **Cloud Storage** - Photos on Cloudinary (encrypted)  
-✅ **Firebase Security** - Google-managed infrastructure  
-✅ **Environment Secrets** - All credentials in .env (not in code)
+✅ **Cloud Storage** - Photos on Cloudinary (encrypted at rest)  
+✅ **Environment Secrets** - All credentials in `.env` (not in code)
 
 ### Recommended Security Enhancements
 - [ ] Add rate limiting on endpoints
@@ -351,12 +432,13 @@ registered_at (DATETIME)
 **Problem:** "Multiple faces detected"
 - **Solution:** Only one person per photo
 
-### Firebase Notifications Not Working
-**Problem:** Push notifications not received
-- **Solution:** 
-  - Verify `firebase-key.json` exists and is valid
-  - Check FCM token is being stored in database
-  - Ensure Firebase project has Messaging enabled
+### Email Notifications Not Working
+**Problem:** Emails not received
+- **Solution:**
+  - Verify `BREVO_API_KEY` is set correctly
+  - Check sender email is verified in Brevo dashboard
+  - Review application logs for SMTP errors
+  - Ensure `MAIL_FROM_EMAIL` matches a verified sender
 
 ### Cloudinary Upload Fails
 **Problem:** Photo upload errors
@@ -364,6 +446,13 @@ registered_at (DATETIME)
   - Verify Cloudinary credentials in `.env`
   - Check internet connectivity
   - Ensure image format is JPEG/PNG
+
+### Firebase Connection Issues
+**Problem:** "Firebase initialization failed"
+- **Solution:**
+  - Verify `firebase-key.json` exists and is valid
+  - Check `FIREBASE_DB_URL` is correct
+  - Ensure Firebase Realtime Database is created and rules allow access
 
 ### Database Locked
 **Problem:** "Database is locked"
@@ -383,13 +472,80 @@ registered_at (DATETIME)
 6. Cosine distance compared against stored encodings
 7. Match threshold: 0.6
 
-### Notification Flow
-1. Visitor submits request → System creates DB entry
-2. 2-minute reminder scheduled via APScheduler
-3. Employee receives email with visitor photo (Flask-Mail)
-4. Employee receives push notification (Firebase Cloud Messaging)
-5. On accept/reject → Visitor gets instant push notification
-6. After 2 minutes (if pending) → Visitor gets reminder push
+### Visitor Request Flow (Firebase + Brevo)
+```
+1. VISITOR SUBMITS REQUEST
+   → Upload photo to Cloudinary
+   → Create request in Firebase Realtime Database
+   → Backup to SQLite (optional)
+   → EMAIL #1: "New Visitor Alert" to Employee (Brevo SMTP)
+   → SCHEDULE: 2-minute reminder email (APScheduler)
+
+2. EMPLOYEE ACCEPTS (within 2 min)
+   → Cancel reminder
+   → Update status to 'accepted' in Firebase
+   → EMAIL #2: "Request Accepted" to Visitor
+   → EMAIL #3: "Confirmation" to Employee
+
+3. EMPLOYEE REJECTS (within 2 min)
+   → Cancel reminder
+   → Update status to 'rejected' in Firebase
+   → EMAIL #4: "Request Declined" to Visitor
+   → EMAIL #5: "Confirmation" to Employee
+
+4. NO RESPONSE (2 min elapsed)
+   → EMAIL #6: "Reminder: Pending Visitor" to Employee
+   → Employee can then accept/reject (emails #2-5)
+```
+
+### Admin Request Approval Flow
+```
+ADMIN OPENS /admin/requests
+   → Fetch all pending requests from Firebase
+   → Display with visitor photo, employee name/email
+   → Admin clicks Accept/Reject
+   → Same email flow as employee action (visitor + employee notified)
+```
+
+## Email Types Summary
+
+| Email | Recipient | Trigger | Content |
+|-------|-----------|---------|---------|
+| New Visitor Alert | Employee | Request submitted | Visitor details, photo, dashboard link |
+| Pending Reminder | Employee | 2 minutes passed | Reminder with dashboard link |
+| Acceptance Confirmation | Visitor | Employee/Admin accepts | Proceed to meet them |
+| Acceptance Confirmation | Employee | Employee/Admin accepts | Confirmation of acceptance |
+| Rejection Notice | Visitor | Employee/Admin rejects | Request declined, contact security |
+| Rejection Confirmation | Employee | Employee/Admin rejects | Confirmation of rejection |
+
+## Testing
+
+### Run Email Flow Test
+```bash
+python test_email_flow.py
+```
+
+### Local Testing with MailHog
+```bash
+# Start MailHog
+docker run -d -p 1025:1025 -p 8025:8025 mailhog/mailhog
+
+# Configure .env for MailHog
+MAIL_SERVER=localhost
+MAIL_PORT=1025
+MAIL_USE_TLS=False
+
+# View emails at http://localhost:8025
+```
+
+See `EMAIL_TESTING_GUIDE.md` for complete testing documentation.
+
+## Performance Metrics
+
+- **Face Detection:** ~100-200ms per image
+- **Email Delivery:** 1-2 seconds (Brevo SMTP)
+- **Database Query:** <50ms average
+- **Page Load:** <2 seconds
 
 ## Future Enhancements
 
@@ -403,14 +559,6 @@ registered_at (DATETIME)
 - [ ] Video call capability between visitor and employee
 - [ ] Scheduled visit reservations
 
-## Performance Metrics
-
-- **Face Detection:** ~100-200ms per image
-- **Email Delivery:** 1-2 seconds
-- **Push Notification:** <1 second
-- **Database Query:** <50ms average
-- **Page Load:** <2 seconds
-
 ## License
 
 MIT License - See LICENSE file
@@ -422,3 +570,4 @@ Found a bug? Have a feature request? [Open an issue on GitHub](https://github.co
 ---
 
 **Built with ❤️ for modern visitor management**
+
