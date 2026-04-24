@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Admin - Requests - Faceoffice{% endblock %}
+
+{% block content %}
+<div class="page-container admin-page">
+    <div class="admin-header">
+        <h2>Pending Visitor Requests</h2>
+        <a href="/admin/employees" class="btn btn-secondary">Back to Employees</a>
+    </div>
+
+    <div class="requests-container">
+        <div id="requestsList" class="requests-list">
+            <p>Loading requests...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadRequests() {
+    try {
+        console.log('Loading all pending requests for admin...');
+        const response = await fetch('/admin/requests/list');
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Requests received:', data);
+
+        if (!data.requests || data.requests.length === 0) {
+            document.getElementById('requestsList').innerHTML = '<p>No pending requests at this time.</p>';
+            return;
+        }
+
+        let html = '';
+        data.requests.forEach(request => {
+            html += `
+                <div class="request-card">
+                    <img src="${request.photo_url}" alt="Visitor" class="request-photo">
+                    <div class="request-info">
+                        <h4>${request.visitor_name}</h4>
+                        <p><strong>Phone:</strong> ${request.visitor_phone}</p>
+                        <p><strong>Email:</strong> ${request.visitor_email}</p>
+                        <p><strong>Requested:</strong> ${new Date(request.created_at).toLocaleString()}</p>
+                        <p><strong>Employee:</strong> ${request.employee_name} (${request.employee_email})</p>
+                    </div>
+                    <div class="request-actions">
+                        <button class="btn btn-success" onclick="acceptRequest('${request.id}')">Accept</button>
+                        <button class="btn btn-danger" onclick="rejectRequest('${request.id}')">Reject</button>
+                    </div>
+                </div>
+            `;
+        });
+
+        document.getElementById('requestsList').innerHTML = html;
+    } catch (e) {
+        console.error('Error:', e);
+        document.getElementById('requestsList').innerHTML = `<p class="error">Error loading requests: ${e.message}</p>`;
+    }
+}
+
+async function acceptRequest(requestId) {
+    if (!confirm('Accept this visitor request on behalf of the employee?')) return;
+
+    try {
+        console.log('Admin accepting request:', requestId);
+        const response = await fetch(`/admin/requests/${requestId}/accept`, { method: 'POST' });
+        const data = await response.json();
+
+        if (response.ok) {
+            alert('Request accepted. Visitor and employee have been notified via email.');
+            loadRequests();
+        } else {
+            alert(data.error || 'Error accepting request');
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+async function rejectRequest(requestId) {
+    if (!confirm('Reject this visitor request on behalf of the employee?')) return;
+
+    try {
+        console.log('Admin rejecting request:', requestId);
+        const response = await fetch(`/admin/requests/${requestId}/reject`, { method: 'POST' });
+        const data = await response.json();
+
+        if (response.ok) {
+            alert('Request rejected. Visitor and employee have been notified via email.');
+            loadRequests();
+        } else {
+            alert(data.error || 'Error rejecting request');
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+}
+
+// Load requests on page load and refresh every 5 seconds
+loadRequests();
+setInterval(loadRequests, 5000);
+</script>
+{% endblock %}
+
